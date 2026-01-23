@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja" x-data="yoloApp()">
+<head>
+  <meta charset="UTF-8" />
+  <title>YOLO Laptop Detector</title>
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 24px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .preview {
+      margin-top: 16px;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    .detections-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+    .detections-table th,
+    .detections-table td {
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 16px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn[disabled] {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #555;
+    }
+    .error {
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>YOLO Laptop Detector</h1>
+    <p>画像をアップロードすると、YOLO（学習済みノートPCモデル）が推論し、検出結果を表示します。</p>
+
+    <div>
+      <input type="file" @change="onFileChange" accept="image/*" />
+
+<hr style="margin: 24px 0;" />
+
+<h2>Webカメラモード</h2>
+<p>Webカメラ映像から一定間隔でフレームを送信して、YOLOでリアルタイム検知を行います。</p>
+
+<div style="display: flex; gap: 16px; flex-wrap: wrap;">
+  <div>
+    <video id="cam" width="320" height="240" autoplay playsinline style="background: #000;"></video>
+    <div style="margin-top: 8px;">
+      <button class="btn" @click="startStream" x-show="!streaming">
+        Webカメラ開始
+      </button>
+      <button class="btn" @click="stopStream" x-show="streaming">
+        Webカメラ停止
+      </button>
+    </div>
+    <div class="status" style="margin-top: 4px;">
+      FPS:
+      <input type="number" min="1" max="5" step="1" x-model.number="fps" style="width: 60px;" />
+      /
+      conf:
+      <strong x-text="conf.toFixed(2)"></strong>
+    </div>
+  </div>
+
+  <div class="preview" style="flex: 1;">
+    <h3>検出結果（Webカメラ）</h3>
+    <img x-show="imageUrl" :src="imageUrl" alt="stream result" />
+    <div class="status" x-show="message" x-text="message"></div>
+    <div class="status error" x-show="error" x-text="error"></div>
+
+    <table class="detections-table" x-show="detections.length > 0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>クラス</th>
+          <th>conf</th>
+          <th>x1</th>
+          <th>y1</th>
+          <th>x2</th>
+          <th>y2</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="(det, idx) in detections" :key="idx">
+          <tr>
+            <td x-text="idx + 1"></td>
+            <td x-text="det.class_name"></td>
+            <td x-text="det.confidence.toFixed(3)"></td>
+            <td x-text="det.x1.toFixed(1)"></td>
+            <td x-text="det.y1.toFixed(1)"></td>
+            <td x-text="det.x2.toFixed(1)"></td>
+            <td x-text="det.y2.toFixed(1)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Webカメラ用のオフスクリーンCanvas -->
+<canvas id="cam-canvas" width="640" height="480" style="display:none;"></canvas>
+
+
+
+      <button class="btn" @click="submit" :disabled="!file || loading">
+        <span x-show="!loading">推論する</span>
+        <span x-show="loading">推論中...</span>
+      </button>
+      <div style="margin: 8px 0;">
+        <label>
+          conf:
+          <strong x-text="conf.toFixed(2)"></strong>
+        </label>
+        <input
+          type="range"
+          min="0.05"
+          max="0.95"
+          step="0.05"
+          x-model.number="conf"
+          style="width: 240px;"
+        />
+      </div>
+      <div class="status" x-show="message" x-text="message"></div>
+      <div class="status error" x-show="error" x-text="error"></div>
+    </div>
+
+    <div class="preview" x-show="imageUrl">
+      <h2>検出結果画像</h2>
+      <img :src="imageUrl" alt="結果画像" />
+    </div>
+
+    <div class="preview" x-show="detections.length > 0">
+      <h2>検出一覧</h2>
+      <table class="detections-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>クラス</th>
+            <th>conf</th>
+            <th>x1</th>
+            <th>y1</th>
+            <th>x2</th>
+            <th>y2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(det, idx) in detections" :key="idx">
+            <tr>
+              <td x-text="idx + 1"></td>
+              <td x-text="det.class_name"></td>
+              <td x-text="det.confidence.toFixed(3)"></td>
+              <td x-text="det.x1.toFixed(1)"></td>
+              <td x-text="det.y1.toFixed(1)"></td>
+              <td x-text="det.x2.toFixed(1)"></td>
+              <td x-text="det.y2.toFixed(1)"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+  function yoloApp() {
+    return {
+      file: null,
+      conf: 0.5,
+      imageUrl: "",
+      detections: [],
+      loading: false,
+      message: "",
+      error: "",
+      streaming: false,
+      streamIntervalId: null,
+      videoElement: null,
+      canvasElement: null,
+      fps: 2,
+
+      onFileChange(event) {
+        this.file = event.target.files[0] || null;
+        this.imageUrl = "";
+        this.detections = [];
+        this.message = "";
+        this.error = "";
+      },
+
+      async submit() {
+        if (!this.file) {
+          this.error = "画像ファイルを選択してください。";
+          return;
+        }
+        this.loading = true;
+        this.message = "";
+        this.error = "";
+        this.imageUrl = "";
+        this.detections = [];
+
+        try {
+          const formData = new FormData();
+          formData.append("file", this.file);
+
+          const res = await fetch(`/predict?conf=${this.conf}`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            this.error = err.detail || `エラーが発生しました（${res.status}）`;
+            return;
+          }
+
+          const data = await res.json();
+          if (data.image_url) {
+            this.imageUrl = data.image_url;
+          }
+          this.detections = data.detections || [];
+          this.message = this.detections.length
+            ? `${this.detections.length}件検出しました。`
+            : "検出なし。";
+        } catch (e) {
+          console.error(e);
+          this.error = "通信エラーが発生しました。";
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async startStream() {
+        try {
+          this.error = "";
+          this.message = "";
+          this.detections = [];
+          this.imageUrl = "";
+
+          if (!this.videoElement) {
+            this.videoElement = document.getElementById("cam");
+          }
+          if (!this.canvasElement) {
+            this.canvasElement = document.getElementById("cam-canvas");
+          }
+
+          // Webカメラ取得
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 },
+            audio: false,
+          });
+          this.videoElement.srcObject = stream;
+          this.streaming = true;
+
+          // 一定間隔でフレームキャプチャ＋送信
+          const intervalMs = Math.max(200, Math.floor(1000 / this.fps));
+          this.streamIntervalId = setInterval(() => {
+            this.captureAndSendFrame();
+          }, intervalMs);
+        } catch (e) {
+          console.error(e);
+          this.error = "Webカメラにアクセスできませんでした。ブラウザの権限設定を確認してください。";
+          this.streaming = false;
+        }
+      },
+
+      stopStream() {
+        this.streaming = false;
+        this.message = "Webカメラ停止中。";
+
+        if (this.streamIntervalId) {
+          clearInterval(this.streamIntervalId);
+          this.streamIntervalId = null;
+        }
+        if (this.videoElement && this.videoElement.srcObject) {
+          const tracks = this.videoElement.srcObject.getTracks();
+          tracks.forEach((t) => t.stop());
+          this.videoElement.srcObject = null;
+        }
+      },
+
+      async captureAndSendFrame() {
+        if (!this.streaming) return;
+        if (!this.videoElement || !this.canvasElement) return;
+
+        const video = this.videoElement;
+        const canvas = this.canvasElement;
+        const ctx = canvas.getContext("2d");
+
+        // videoのサイズに合わせてcanvasサイズを調整
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // JPEG Blobに変換して送信
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+
+          try {
+            const formData = new FormData();
+            formData.append("file", blob, "frame.jpg");
+
+            const res = await fetch(`/predict_stream?conf=${this.conf}`, {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              this.error = err.detail || `ストリーム推論中にエラー（${res.status}）`;
+              return;
+            }
+
+            const data = await res.json();
+            // キャッシュ対策でtimestampクエリを付与
+            if (data.image_url) {
+              this.imageUrl = `${data.image_url}?t=${Date.now()}`;
+            }
+            this.detections = data.detections || [];
+            this.message = this.detections.length
+              ? `${this.detections.length}件検出中。`
+              : "検出なし。";
+          } catch (e) {
+            console.error(e);
+            this.error = "ストリーム推論中に通信エラーが発生しました。";
+          }
+        }, "image/jpeg", 0.8);
+      },
+    };
+  }
+</script>
+
+</body>
+</html>
