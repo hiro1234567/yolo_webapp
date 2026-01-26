@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*/__pycache__/
+*.pyc
+
+# YOLO / Ultralytics
+runs/
+datasets/
+
+static/results/*
+!static/results/.gitkeep
+
+
+# OS
+.DS_Store
+
+# env
+.env
+.env.*
+
+
+test.test
