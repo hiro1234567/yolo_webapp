@@ -132,7 +132,7 @@ async def predict_stream(
     out_path = RESULTS_DIR / "stream.jpg"
     return run_yolo_and_build_response(img, conf, out_path)
 
-
+# Webサーバ起動
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="127.0.0.1", port=8080, reload=True)
