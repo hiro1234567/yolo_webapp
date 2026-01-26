@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from ultralytics import YOLO
 from PIL import Image
 import numpy as np
-from io import BytesIO  # ここを上の方に移動しておく
+from io import BytesIO  
 
 
 
@@ -135,5 +135,4 @@ async def predict_stream(
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8080, reload=True)
