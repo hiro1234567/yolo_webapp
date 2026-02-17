@@ -1,23 +1,37 @@
-# Python
-.venv/
+# Byte-compiled / optimized / dll files
 __pycache__/
-*/__pycache__/
 *.pyc
+*.pyd
+*.pyo
+*.orig
 
-# YOLO / Ultralytics
-runs/
-datasets/
-
-static/results/*
-!static/results/.gitkeep
-
-
-# OS
-.DS_Store
-
-# env
+# Distributions and packaging
+.Python
+build/
+dist/
+venv/
+env/
 .env
-.env.*
 
+# Unit test / coverage reports
+.pytest_cache/
+htmlcov/
+.coverage
 
-test.test
+# Editors
+.idea/
+.vscode/
+
+# OS-specific
+.DS_Store
+*.log
+*.sqlite3
+
+# Gemini CLI
+.gemini/
+
+# Models
+models/*.pt
+
+# Docker
+*.dockerignore

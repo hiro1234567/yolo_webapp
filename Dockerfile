@@ -1,26 +1,32 @@
+# Base Image
 FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
-
+# Set working directory
 WORKDIR /app
 
-# OpenCV などで必要になる最低限のライブラリ
+# システム依存パッケージ
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    curl \
+    git \
+    nodejs \
+    npm \
+    # OpenCV / Ultralytics dependencies
     libgl1 \
     libglib2.0-0 \
-  && rm -rf /var/lib/apt/lists/*
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# 依存ライブラリ
+# Install dependencies
 COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# アプリ本体をコピー
-COPY . .
 
-# Cloud Run などで PORT 環境変数を使えるようにしておく（デフォルト8080）
-ENV PORT=8080
+# Expose port
+EXPOSE 8010
 
-# FastAPI + Uvicorn 起動
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8010", "--reload"]
