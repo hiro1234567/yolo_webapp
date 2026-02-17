@@ -13,6 +13,7 @@ venv/
 env/
 .env
 
+
 # Unit test / coverage reports
 .pytest_cache/
 htmlcov/
@@ -29,6 +30,8 @@ htmlcov/
 
 # Gemini CLI
 .gemini/
+gemini/
+
 
 # Docker
 *.dockerignore
