@@ -30,8 +30,5 @@ htmlcov/
 # Gemini CLI
 .gemini/
 
-# Models
-models/*.pt
-
 # Docker
 *.dockerignore
