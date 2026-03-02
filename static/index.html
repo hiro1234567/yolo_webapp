@@ -32,37 +32,44 @@
         <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">リアルタイム物体検知</h1>
 
         <!-- Controls -->
-        <div class="bg-white p-4 rounded-lg shadow-md mb-4 flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <label for="target-select" class="font-bold">ターゲット:</label>
-                <select 
-                    id="target-select" 
-                    x-model="selectedTarget"
-                    class="p-2 border rounded-md"
-                >
-                    <option value="smartphone">スマホ</option>
-                    <option value="bear">熊</option>
-                    <option value="laptop">ラップトップ</option>
-                    <option value="pen">ペン</option>
-                    <option value="screwdriver">ドライバー</option>
-                </select>
+        <div class="bg-white p-4 rounded-lg shadow-md mb-4 space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <label for="target-select" class="font-bold">ターゲット:</label>
+                    <select 
+                        id="target-select" 
+                        x-model="selectedTarget"
+                        class="p-2 border rounded-md"
+                    >
+                        <option value="smartphone">スマホ</option>
+                        <option value="bear">熊</option>
+                        <option value="laptop">ラップトップ</option>
+                        <option value="pen">ペン</option>
+                        <option value="screwdriver">ドライバー</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <button 
+                        @click="startCamera" 
+                        :disabled="isCameraOn" 
+                        class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md disabled:bg-gray-400"
+                    >
+                        カメラON
+                    </button>
+                    <button 
+                        @click="stopCamera" 
+                        :disabled="!isCameraOn" 
+                        class="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md disabled:bg-gray-400"
+                    >
+                        カメラOFF
+                    </button>
+                </div>
             </div>
-            
             <div class="flex items-center space-x-2">
-                <button 
-                    @click="startCamera" 
-                    :disabled="isCameraOn" 
-                    class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md disabled:bg-gray-400"
-                >
-                    カメラON
-                </button>
-                <button 
-                    @click="stopCamera" 
-                    :disabled="!isCameraOn" 
-                    class="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md disabled:bg-gray-400"
-                >
-                    カメラOFF
-                </button>
+                <label for="conf-slider" class="font-bold">信頼度:</label>
+                <input type="range" id="conf-slider" min="0.05" max="0.95" step="0.05" x-model.number="confidence" class="w-full">
+                <span x-text="confidence.toFixed(2)" class="font-mono w-12 text-right"></span>
             </div>
         </div>
 
@@ -72,9 +79,9 @@
             
             <img x-ref="image" src="" class="w-full h-auto rounded-md" />
 
-            <div x-show="isLoading" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <!-- <div x-show="isLoading" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
                 <div class="loader"></div>
-            </div>
+            </div> -->
              <p x-show="!isCameraOn && !image.src" class="text-gray-500">カメラを開始してください</p>
         </div>
     </div>
@@ -86,6 +93,7 @@
             isCameraOn: false,
             stream: null,
             selectedTarget: 'smartphone',
+            confidence: 0.25, // Default confidence threshold
             video: null,
             image: null,
             lastFrameTime: 0,
@@ -131,6 +139,12 @@
             async predictFrame(timestamp) {
                 if (!this.isCameraOn) return;
 
+                // Add a guard to wait for video to be ready
+                if (this.video.videoWidth === 0) {
+                    requestAnimationFrame(this.predictFrame.bind(this));
+                    return;
+                }
+
                 if (timestamp - this.lastFrameTime < this.frameInterval) {
                     requestAnimationFrame(this.predictFrame.bind(this));
                     return;
@@ -153,6 +167,7 @@
                 canvas.toBlob(async (blob) => {
                     const formData = new FormData();
                     formData.append('target', this.selectedTarget);
+                    formData.append('confidence', this.confidence); // Send confidence to server
                     formData.append('image_blob', blob, 'frame.jpg');
 
                     try {
@@ -166,7 +181,10 @@
                         }
 
                         const data = await response.json();
-                        this.image.src = data.image;
+                        if (data.image_url) {
+                            // Set the image source to the URL from the server, adding a timestamp to prevent caching
+                            this.image.src = `${data.image_url}?t=${Date.now()}`;
+                        }
 
                     } catch (error) {
                         console.error('Prediction error:', error);

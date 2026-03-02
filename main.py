@@ -1,5 +1,6 @@
 import io
 import base64
+from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -7,11 +8,23 @@ from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 import cv2
+import logging
+
+# ロガーを設定
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# --- Directories ---
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+RESULTS_DIR = STATIC_DIR / "results"
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
 # Mount the 'static' directory to serve frontend files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # -----------------------------------------------------------------------------
 # Model and Class Mapping Definitions
@@ -89,57 +102,59 @@ def draw_predictions(image: np.ndarray, predictions, target_class_id: int, targe
 
 @app.get("/")
 async def root():
-    return FileResponse('static/index.html')
+    return FileResponse(str(STATIC_DIR / 'index.html'))
 
 
 @app.post("/predict_stream")
-async def predict_stream(target: str = Form(...), image_blob: UploadFile = File(...)):
-    """
-    Receives an image blob and a target, performs object detection,
-    and returns the processed image with detection data.
-    """
+async def predict_stream(target: str = Form(...), confidence: float = Form(...), image_blob: UploadFile = File(...)):
+    logger.info(f"[/predict_stream] Received request for target: {target}, confidence: {confidence}")
+
     if target not in model_mapping:
+        logger.warning(f"[/predict_stream] Invalid target specified: {target}")
         return JSONResponse(status_code=400, content={"error": "Invalid target specified"})
 
     try:
         # 1. Load the corresponding model (lazy loading)
         model = get_model(target)
         model_info = model_mapping[target]
+        logger.info(f"[/predict_stream] Model loaded for target: {target}")
 
         # 2. Read and process the uploaded image
         contents = await image_blob.read()
-        pil_image = Image.open(io.BytesIO(contents))
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         
-        # Convert to numpy array for OpenCV processing
         np_image = np.array(pil_image)
-        if np_image.shape[2] == 4:  # Handle RGBA from browser
-            np_image = cv2.cvtColor(np_image, cv2.COLOR_BGRA2BGR)
-        else:
-            np_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
+        np_image_bgr = cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
+        logger.info(f"[/predict_stream] Image processed. Shape: {np_image_bgr.shape}")
 
-        # 3. Run inference
-        predictions = model(np_image, verbose=False)
+        # 3. Run inference with the specified confidence
+        predictions = model(np_image_bgr, conf=confidence, verbose=False)
+        logger.info(f"[/predict_stream] Inference completed.")
 
         # 4. Draw predictions for the target class only
         processed_image, detections = draw_predictions(
-            np_image,
+            np_image_bgr,
             predictions,
             model_info['class_id'],
             model_info['label']
         )
+        logger.info(f"[/predict_stream] Predictions drawn. Detections count: {len(detections)}")
 
-        # 5. Convert processed image back to Base64
-        _, buffer = cv2.imencode('.jpg', processed_image)
-        img_bytes = buffer.tobytes()
-        base64_image = base64.b64encode(img_bytes).decode('utf-8')
-        data_url = f"data:image/jpeg;base64,{base64_image}"
+        # 5. Save the processed image to a file
+        output_path = RESULTS_DIR / "stream.jpg"
+        cv2.imwrite(str(output_path), processed_image)
+        logger.info(f"[/predict_stream] Processed image saved to: {output_path}")
+        
+        # 6. Format and return the response with the image URL
+        image_url = f"/static/results/stream.jpg"
 
-        # 6. Format and return the response
         response_data = {
-            "image": data_url,
+            "image_url": image_url,
             "detections": detections,
         }
+        logger.info(f"[/predict_stream] Returning JSON response.")
         return JSONResponse(content=response_data)
 
     except Exception as e:
+        logger.error(f"[/predict_stream] An error occurred: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"error": str(e)})

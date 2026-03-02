@@ -28,6 +28,7 @@ htmlcov/
 *.log
 *.sqlite3
 
+
 # Gemini CLI
 .gemini/
 gemini/
@@ -35,3 +36,6 @@ gemini/
 
 # Docker
 *.dockerignore
+
+# other
+samples/
